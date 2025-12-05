@@ -33,7 +33,7 @@ import com.example.mobileca3.ui.theme.nunitoFont
 import kotlinx.coroutines.delay
 
 
-// ⭐ Temporary storage manager to get functionality working (titles only)
+// Temporary storage manager to get functionality working (titles only)
 
 object FavouriteManager {
     private const val PREFS = "favourites_prefs"
