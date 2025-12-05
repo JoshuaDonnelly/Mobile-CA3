@@ -33,7 +33,8 @@ import com.example.mobileca3.ui.theme.nunitoFont
 import kotlinx.coroutines.delay
 
 
-// Temporary storage manager to get functionality working (titles only)
+// Favourites Storer (titles only)
+//Temporary for functionality purposes**
 
 object FavouriteManager {
     private const val PREFS = "favourites_prefs"
@@ -60,6 +61,34 @@ object FavouriteManager {
 
     fun isFavourite(context: Context, recipe: Recipe): Boolean {
         return getFavourites(context).contains(recipe.title)
+    }
+}
+
+//Temporary for functionality purposes**
+// Profile storer(username + fullname)
+// Saves two simple strings to SharedPreferences.
+// Keys: "profile_username", "profile_fullname"
+object ProfileManager {
+    private const val PREFS = "profile_prefs"
+    private const val KEY_USERNAME = "profile_username"
+    private const val KEY_FULLNAME = "profile_fullname"
+
+    fun saveProfile(context: Context, username: String, fullName: String) {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        prefs.edit()
+            .putString(KEY_USERNAME, username)
+            .putString(KEY_FULLNAME, fullName)
+            .apply()
+    }
+
+    fun getUsername(context: Context): String {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return prefs.getString(KEY_USERNAME, "") ?: ""
+    }
+
+    fun getFullName(context: Context): String {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return prefs.getString(KEY_FULLNAME, "") ?: ""
     }
 }
 
@@ -123,8 +152,14 @@ fun PocketChef(darkTheme: Boolean, onThemeUpdated: () -> Unit) {
                 )
             }
 
+            // Favourites screen already present
             composable("favourites") {
                 FavouritesScreen()
+            }
+
+            // NEW: Profile route
+            composable("profile") {
+                ProfileScreen()
             }
         }
     }
@@ -232,8 +267,8 @@ fun BottomNavigationBar(navController: NavController, currentRoute: String?) {
         NavigationBarItem(
             icon = { Icon(Icons.Filled.Person, null) },
             label = { Text("Profile") },
-            selected = false,
-            onClick = { }
+            selected = currentRoute == "profile",
+            onClick = { navController.navigate("profile") }
         )
     }
 }
@@ -283,9 +318,8 @@ fun AnimatedRecipeCard(recipe: Recipe, index: Int) {
 
     var visible by remember { mutableStateOf(false) }
 
-    // Recalculate favourite state dynamically
-    val isFavourite by remember { mutableStateOf(FavouriteManager.isFavourite(context, recipe)) }
-    var favouriteState by remember { mutableStateOf(isFavourite) }
+    // read favourite once on composition and keep local state for toggling
+    var favouriteState by remember { mutableStateOf(FavouriteManager.isFavourite(context, recipe)) }
 
     LaunchedEffect(Unit) {
         delay((index * 100).toLong())
@@ -294,7 +328,7 @@ fun AnimatedRecipeCard(recipe: Recipe, index: Int) {
 
     val offsetY by animateFloatAsState(
         targetValue = if (visible) 0f else 60f,
-        animationSpec = spring(0.65f, Spring.StiffnessMedium),
+        animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMedium),
         label = ""
     )
 
@@ -344,7 +378,8 @@ fun AnimatedRecipeCard(recipe: Recipe, index: Int) {
 @Composable
 fun FavouritesScreen() {
     val context = LocalContext.current
-    var savedTitles by remember { mutableStateOf(FavouriteManager.getFavourites(context).toList()) }
+    // Recompose when we return to screen: read latest favourites each composition
+    val savedTitles = remember { mutableStateOf(FavouriteManager.getFavourites(context).toList()) }
 
     Column(
         modifier = Modifier
@@ -357,13 +392,15 @@ fun FavouritesScreen() {
             modifier = Modifier.padding(bottom = 16.dp)
         )
 
-        if (savedTitles.isEmpty()) {
+        if (savedTitles.value.isEmpty()) {
             Text("No favourites yet! ⭐")
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                itemsIndexed(savedTitles) { _, title ->
+                itemsIndexed(savedTitles.value) { _, title ->
                     Card(
-                        modifier = Modifier.fillMaxWidth().padding(4.dp)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(4.dp)
                     ) {
                         Text(
                             text = title,
@@ -374,5 +411,79 @@ fun FavouritesScreen() {
                 }
             }
         }
+    }
+}
+
+// ----------------- PROFILE SCREEN (Compose) -----------------
+@Composable
+fun ProfileScreen() {
+    val context = LocalContext.current
+
+    // Initialize state from SharedPreferences
+    var username by remember { mutableStateOf(ProfileManager.getUsername(context)) }
+    var fullName by remember { mutableStateOf(ProfileManager.getFullName(context)) }
+    var savedConfirmation by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Text(
+            "Profile",
+            style = MaterialTheme.typography.headlineMedium
+        )
+
+        OutlinedTextField(
+            value = username,
+            onValueChange = { username = it },
+            label = { Text("Username") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        OutlinedTextField(
+            value = fullName,
+            onValueChange = { fullName = it },
+            label = { Text("Full name") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Button(onClick = {
+                ProfileManager.saveProfile(context, username.trim(), fullName.trim())
+                savedConfirmation = true
+            }) {
+                Text("Save Profile")
+            }
+
+            // Simple clear button
+            OutlinedButton(onClick = {
+                username = ""
+                fullName = ""
+                ProfileManager.saveProfile(context, "", "")
+                savedConfirmation = false
+            }) {
+                Text("Clear")
+            }
+        }
+
+        if (savedConfirmation) {
+            Text(
+                text = "Profile saved.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+
+        Spacer(modifier = Modifier.weight(1f))
+
+        // Show saved profile summary
+        Divider()
+        Text("Saved profile:", style = MaterialTheme.typography.titleSmall)
+        Text("Username: ${ProfileManager.getUsername(context)}")
+        Text("Full name: ${ProfileManager.getFullName(context)}")
     }
 }
