@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
@@ -19,9 +20,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -94,7 +98,8 @@ object ProfileManager {
 
 data class Recipe(
     val title: String,
-    val description: String
+    val description: String,
+    val imageRes: Int
 )
 
 class MainActivity : ComponentActivity() {
@@ -146,7 +151,7 @@ fun PocketChef(darkTheme: Boolean, onThemeUpdated: () -> Unit) {
             }
 
             composable("home") {
-                homeScreen(
+                HomeScreen(
                     darkTheme = darkTheme,
                     onThemeUpdated = onThemeUpdated
                 )
@@ -173,28 +178,36 @@ fun SplashScreen() {
             .padding(16.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = "Pocket Chef",
-            style = TextStyle(
-                fontSize = 48.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = nunitoFont
-            )
+        Image(
+            painter = painterResource(id = R.drawable.icon),
+            contentDescription = "Pocket Chef",
+            modifier = Modifier
+                .size(120.dp)
+                .padding(8.dp)
+                .clip(MaterialTheme.shapes.medium),
+            contentScale = ContentScale.Crop
         )
     }
 }
 
 @Composable
-fun homeScreen(darkTheme: Boolean, onThemeUpdated: () -> Unit) {
+fun HomeScreen(darkTheme: Boolean, onThemeUpdated: () -> Unit) {
 
     val context = LocalContext.current
 
+    var username by remember { mutableStateOf("") }
+
+    LaunchedEffect(Unit) {
+        username = ProfileManager.getUsername(context)
+    }
+
+
     val sampleRecipes = listOf(
-        Recipe("Spaghetti Bolognese", "Rich tomato sauce with minced beef and herbs."),
-        Recipe("Chicken Stir Fry", "Quick, colorful vegetables with sticky soy glaze."),
-        Recipe("Beef Tacos", "Seasoned beef with lettuce, cheese & salsa."),
-        Recipe("Garlic Butter Salmon", "Creamy, flaky salmon with herbs & lemon."),
-        Recipe("Pancakes & Syrup", "Fluffy stack with maple drizzle.")
+        Recipe("Spaghetti Bolognese", "Rich tomato sauce with minced beef and herbs.", R.drawable.spagbol),
+        Recipe("Chicken Stir Fry", "Quick, colorful vegetables with sticky soy glaze.", R.drawable.stirfry),
+        Recipe("Beef Tacos", "Seasoned beef with lettuce, cheese & salsa.", R.drawable.tacos),
+        Recipe("Garlic Butter Salmon", "Creamy, flaky salmon with herbs & lemon.", R.drawable.salmon),
+        Recipe("Pancakes & Syrup", "Fluffy stack with maple drizzle.", R.drawable.pancakes)
     )
 
     Column(
@@ -227,6 +240,20 @@ fun homeScreen(darkTheme: Boolean, onThemeUpdated: () -> Unit) {
         }
 
         Spacer(modifier = Modifier.height(40.dp))
+        if (username.isEmpty()) {
+            AnimatedText(
+                text ="Pocket Chef",
+                style = MaterialTheme.typography.headlineLarge,
+                color = MaterialTheme.colorScheme.primary
+            )
+        } else {
+            AnimatedText(
+                text = "Hi Again, $username!",
+                style = MaterialTheme.typography.headlineLarge,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+        Spacer(modifier = Modifier.height(8.dp))
 
         AnimatedText(
             text ="What's on Today's Menu?",
@@ -337,40 +364,65 @@ fun AnimatedRecipeCard(recipe: Recipe, index: Int) {
         animationSpec = tween(300),
         label = ""
     )
-
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .graphicsLayer { translationY = offsetY; this.alpha = alpha }
             .padding(6.dp)
     ) {
-        Column(Modifier.padding(16.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.Start
+        ) {
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(recipe.title, style = MaterialTheme.typography.titleLarge)
+            Image(
+                painter = painterResource(id = recipe.imageRes),
+                contentDescription = null,
+                modifier = Modifier
+                    .size(120.dp)
+                    .padding(8.dp)
+                    .clip(MaterialTheme.shapes.medium),
+                contentScale = ContentScale.Crop
+            )
 
-                Icon(
-                    imageVector = if (favouriteState) Icons.Filled.Star else Icons.Outlined.Star,
-                    contentDescription = "Toggle Favourite",
-                    tint = if (favouriteState) Color(0xFFFFC107) else Color.Gray,
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clickable {
-                            favouriteState = !favouriteState
-                            if (favouriteState)
-                                FavouriteManager.saveFavourite(context, recipe)
-                            else
-                                FavouriteManager.removeFavourite(context, recipe)
-                        }
+            Column(modifier = Modifier.weight(1f)) {
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = recipe.title,
+                        style = MaterialTheme.typography.titleLarge,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    Icon(
+                        imageVector = if (favouriteState) Icons.Filled.Star else Icons.Outlined.Star,
+                        contentDescription = "Toggle Favourite",
+                        tint = if (favouriteState) Color(0xFFFFC107) else Color.Gray,
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clickable {
+                                favouriteState = !favouriteState
+                                if (favouriteState)
+                                    FavouriteManager.saveFavourite(context, recipe)
+                                else
+                                    FavouriteManager.removeFavourite(context, recipe)
+                            }
+                    )
+                }
+
+                Spacer(Modifier.height(6.dp))
+
+                Text(
+                    text = recipe.description,
+                    style = MaterialTheme.typography.bodyMedium
                 )
             }
-
-            Spacer(Modifier.height(4.dp))
-
-            Text(recipe.description, style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
