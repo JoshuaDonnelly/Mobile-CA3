@@ -1,71 +1,73 @@
 package com.example.mobileca3
 
+import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.LinearOutSlowInEasing
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Label
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.Star
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.currentBackStackEntryAsState
-import androidx.navigation.compose.rememberNavController
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.remember
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.wear.compose.material3.AnimatedText
+import androidx.navigation.NavController
+import androidx.navigation.compose.*
 import com.example.compose.AppTheme
 import com.example.mobileca3.ui.theme.nunitoFont
 import kotlinx.coroutines.delay
 
 
+// ⭐ Temporary storage manager to get functionality working (titles only)
 
+object FavouriteManager {
+    private const val PREFS = "favourites_prefs"
+    private const val KEY = "favourite_titles"
+
+    fun saveFavourite(context: Context, recipe: Recipe) {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val existing = prefs.getStringSet(KEY, mutableSetOf()) ?: mutableSetOf()
+        val updated = existing + recipe.title
+        prefs.edit().putStringSet(KEY, updated).apply()
+    }
+
+    fun removeFavourite(context: Context, recipe: Recipe) {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val existing = prefs.getStringSet(KEY, mutableSetOf()) ?: mutableSetOf()
+        val updated = existing - recipe.title
+        prefs.edit().putStringSet(KEY, updated).apply()
+    }
+
+    fun getFavourites(context: Context): Set<String> {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return prefs.getStringSet(KEY, emptySet()) ?: emptySet()
+    }
+
+    fun isFavourite(context: Context, recipe: Recipe): Boolean {
+        return getFavourites(context).contains(recipe.title)
+    }
+}
 
 data class Recipe(
     val title: String,
     val description: String
 )
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -93,8 +95,8 @@ fun PocketChef(darkTheme: Boolean, onThemeUpdated: () -> Unit) {
 
     Scaffold(
         bottomBar = {
-            if (currentRoute == "home") {
-                BottomNavigationBar()
+            if (currentRoute != "splash") {
+                BottomNavigationBar(navController, currentRoute)
             }
         }
     ) { innerPadding ->
@@ -113,12 +115,16 @@ fun PocketChef(darkTheme: Boolean, onThemeUpdated: () -> Unit) {
                     }
                 }
             }
-            // Here we have our routes to the other screens
+
             composable("home") {
                 homeScreen(
                     darkTheme = darkTheme,
                     onThemeUpdated = onThemeUpdated
                 )
+            }
+
+            composable("favourites") {
+                FavouritesScreen()
             }
         }
     }
@@ -146,7 +152,8 @@ fun SplashScreen() {
 @Composable
 fun homeScreen(darkTheme: Boolean, onThemeUpdated: () -> Unit) {
 
-    //The recipes are just placeholder for now, will probably change to something else
+    val context = LocalContext.current
+
     val sampleRecipes = listOf(
         Recipe("Spaghetti Bolognese", "Rich tomato sauce with minced beef and herbs."),
         Recipe("Chicken Stir Fry", "Quick, colorful vegetables with sticky soy glaze."),
@@ -154,14 +161,16 @@ fun homeScreen(darkTheme: Boolean, onThemeUpdated: () -> Unit) {
         Recipe("Garlic Butter Salmon", "Creamy, flaky salmon with herbs & lemon."),
         Recipe("Pancakes & Syrup", "Fluffy stack with maple drizzle.")
     )
-    Column (
+
+    Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Spacer (modifier = Modifier.width(8.dp))
+
+        Spacer(modifier = Modifier.height(8.dp))
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -181,53 +190,54 @@ fun homeScreen(darkTheme: Boolean, onThemeUpdated: () -> Unit) {
                 modifier = Modifier.padding(start = 8.dp)
             )
         }
-        Spacer(modifier = Modifier.padding(40.dp))
 
-        //Main content
+        Spacer(modifier = Modifier.height(40.dp))
+
         AnimatedText(
             text ="What's on Today's Menu?",
             style = MaterialTheme.typography.headlineLarge,
             color = MaterialTheme.colorScheme.primary
         )
 
-    Spacer(modifier = Modifier.padding(12.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
-    LazyColumn(
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        modifier = Modifier.fillMaxSize()
-    ) {
-        itemsIndexed(sampleRecipes) { index, recipe ->
-            AnimatedRecipeCard(recipe, index)
+        LazyColumn(
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            itemsIndexed(sampleRecipes) { index, recipe ->
+                AnimatedRecipeCard(recipe, index)
             }
         }
     }
 }
 
 @Composable
-fun BottomNavigationBar() {
+fun BottomNavigationBar(navController: NavController, currentRoute: String?) {
     NavigationBar {
         NavigationBarItem(
-            icon = { Icon(Icons.Filled.Home, contentDescription = "Home") },
+            icon = { Icon(Icons.Filled.Home, null) },
             label = { Text("Home") },
-            selected = true,
-            onClick = { /*TODO*/ }
-        )
-        NavigationBarItem(
-            icon = { Icon(Icons.Filled.Search, contentDescription = "Search") },
-            label = { Text("Search") },
-            selected = false,
-            onClick = { /*TODO*/ }
-        )
-        NavigationBarItem(
-            icon = { Icon(Icons.Filled.Person, contentDescription = "Profile") },
-            label = { Text("Profile") },
-            selected = false,
-            onClick = { /*TODO*/ }
+            selected = currentRoute == "home",
+            onClick = { navController.navigate("home") }
         )
 
+        NavigationBarItem(
+            icon = { Icon(Icons.Filled.Favorite, null) },
+            label = { Text("Favourites") },
+            selected = currentRoute == "favourites",
+            onClick = { navController.navigate("favourites") }
+        )
+
+        NavigationBarItem(
+            icon = { Icon(Icons.Filled.Person, null) },
+            label = { Text("Profile") },
+            selected = false,
+            onClick = { }
+        )
     }
 }
-//https://developer.android.com/develop/ui/views/animations/transitions
+
 @Composable
 fun AnimatedText(
     text: String,
@@ -235,25 +245,23 @@ fun AnimatedText(
     color: Color = MaterialTheme.colorScheme.onBackground,
     modifier: Modifier = Modifier
 ) {
-
-    //Trigger animation when shown
     var visible by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         visible = true
     }
+
     val yOffset by animateFloatAsState(
         targetValue = if (visible) 0f else 40f,
-        animationSpec = tween(durationMillis = 2000, easing = FastOutSlowInEasing)
+        animationSpec = tween(2000, easing = FastOutSlowInEasing)
     )
     val scale by animateFloatAsState(
         targetValue = if (visible) 1f else 0.8f,
-        animationSpec = tween(durationMillis = 2000, easing = FastOutSlowInEasing)
+        animationSpec = tween(2000, easing = FastOutSlowInEasing)
     )
-
     val alpha by animateFloatAsState(
         targetValue = if (visible) 1f else 0f,
-        animationSpec = tween(durationMillis = 2000, easing = LinearOutSlowInEasing)
+        animationSpec = tween(2000, easing = LinearOutSlowInEasing)
     )
 
     Text(
@@ -267,74 +275,104 @@ fun AnimatedText(
             alpha = alpha
         )
     )
-
 }
+
 @Composable
 fun AnimatedRecipeCard(recipe: Recipe, index: Int) {
-    val animationDelay = 100 * index
+    val context = LocalContext.current
 
     var visible by remember { mutableStateOf(false) }
 
+    // Recalculate favourite state dynamically
+    val isFavourite by remember { mutableStateOf(FavouriteManager.isFavourite(context, recipe)) }
+    var favouriteState by remember { mutableStateOf(isFavourite) }
+
     LaunchedEffect(Unit) {
-        delay(animationDelay.toLong())
+        delay((index * 100).toLong())
         visible = true
     }
-    //https://developer.android.com/develop/ui/views/animations/spring-animation
+
     val offsetY by animateFloatAsState(
         targetValue = if (visible) 0f else 60f,
-        animationSpec = spring(
-            dampingRatio = 0.65f,
-            stiffness = Spring.StiffnessMedium
-        ), label = ""
+        animationSpec = spring(0.65f, Spring.StiffnessMedium),
+        label = ""
     )
 
     val alpha by animateFloatAsState(
         targetValue = if (visible) 1f else 0f,
-        animationSpec = tween(300), label = ""
+        animationSpec = tween(300),
+        label = ""
     )
 
-
-    androidx.compose.material3.Card(
+    Card(
         modifier = Modifier
             .fillMaxWidth()
-            .graphicsLayer {
-                translationY = offsetY
-                this.alpha = alpha
-            }
+            .graphicsLayer { translationY = offsetY; this.alpha = alpha }
             .padding(6.dp)
     ) {
         Column(Modifier.padding(16.dp)) {
-            Text(text = recipe.title, style = MaterialTheme.typography.titleLarge)
-            Spacer(Modifier.padding(4.dp))
-            Text(text = recipe.description, style = MaterialTheme.typography.bodyMedium)
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(recipe.title, style = MaterialTheme.typography.titleLarge)
+
+                Icon(
+                    imageVector = if (favouriteState) Icons.Filled.Star else Icons.Outlined.Star,
+                    contentDescription = "Toggle Favourite",
+                    tint = if (favouriteState) Color(0xFFFFC107) else Color.Gray,
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clickable {
+                            favouriteState = !favouriteState
+                            if (favouriteState)
+                                FavouriteManager.saveFavourite(context, recipe)
+                            else
+                                FavouriteManager.removeFavourite(context, recipe)
+                        }
+                )
+            }
+
+            Spacer(Modifier.height(4.dp))
+
+            Text(recipe.description, style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
 
 @Composable
-fun RecipeCard(recipe: Recipe) {
-    androidx.compose.material3.Card(
+fun FavouritesScreen() {
+    val context = LocalContext.current
+    var savedTitles by remember { mutableStateOf(FavouriteManager.getFavourites(context).toList()) }
+
+    Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(4.dp),
-        colors = androidx.compose.material3.CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        )
+            .padding(16.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = recipe.title,
-                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-            )
+        Text(
+            "Favourite Recipes",
+            style = MaterialTheme.typography.headlineMedium,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
 
-            Spacer(modifier = Modifier.padding(4.dp))
-
-            Text(
-                text = recipe.description,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-            )
+        if (savedTitles.isEmpty()) {
+            Text("No favourites yet! ⭐")
+        } else {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                itemsIndexed(savedTitles) { _, title ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth().padding(4.dp)
+                    ) {
+                        Text(
+                            text = title,
+                            modifier = Modifier.padding(16.dp),
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    }
+                }
+            }
         }
     }
 }
-
