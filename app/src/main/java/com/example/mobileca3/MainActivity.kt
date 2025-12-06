@@ -35,6 +35,8 @@ import androidx.navigation.compose.*
 import com.example.compose.AppTheme
 import com.example.mobileca3.ui.theme.nunitoFont
 import kotlinx.coroutines.delay
+import coil.compose.AsyncImage
+
 
 
 // Favourites Storer (titles only)
@@ -99,7 +101,7 @@ object ProfileManager {
 data class Recipe(
     val title: String,
     val description: String,
-    val imageRes: Int
+    val imageUrl: String
 )
 
 class MainActivity : ComponentActivity() {
@@ -157,12 +159,10 @@ fun PocketChef(darkTheme: Boolean, onThemeUpdated: () -> Unit) {
                 )
             }
 
-            // Favourites screen already present
             composable("favourites") {
                 FavouritesScreen()
             }
 
-            // NEW: Profile route
             composable("profile") {
                 ProfileScreen()
             }
@@ -203,11 +203,11 @@ fun HomeScreen(darkTheme: Boolean, onThemeUpdated: () -> Unit) {
 
 
     val sampleRecipes = listOf(
-        Recipe("Spaghetti Bolognese", "Rich tomato sauce with minced beef and herbs.", R.drawable.spagbol),
-        Recipe("Chicken Stir Fry", "Quick, colorful vegetables with sticky soy glaze.", R.drawable.stirfry),
-        Recipe("Beef Tacos", "Seasoned beef with lettuce, cheese & salsa.", R.drawable.tacos),
-        Recipe("Garlic Butter Salmon", "Creamy, flaky salmon with herbs & lemon.", R.drawable.salmon),
-        Recipe("Pancakes & Syrup", "Fluffy stack with maple drizzle.", R.drawable.pancakes)
+        Recipe("Spaghetti Bolognese", "Rich tomato sauce with minced beef and herbs.", "https://www.kitchensanctuary.com/wp-content/uploads/2019/09/Spaghetti-Bolognese-square-FS-0204.jpg"),
+        Recipe("Chicken Stir Fry", "Quick, colorful vegetables with sticky soy glaze.", "https://thegirlonbloor.com/wp-content/uploads/2019/04/The-best-Beef-stir-fry-3-500x500.jpg"),
+        Recipe("Beef Tacos", "Seasoned beef with lettuce, cheese & salsa.", "https://oliviaadriance.com/wp-content/uploads/2023/07/Final_3_Crispy_Baked_Beef_Tacos_grain-free-dairy-free.jpg"),
+        Recipe("Garlic Butter Salmon", "Creamy, flaky salmon with herbs & lemon.", "https://www.kitchensanctuary.com/wp-content/uploads/2020/05/Honey-Garlic-Baked-Salmon-square-FS-111.jpg"),
+        Recipe("Pancakes & Syrup", "Fluffy stack with maple drizzle.", "https://www.allrecipes.com/thmb/TvmI_Fszqlu7ITqqhtj8l_JWqZo=/1500x0/filters:no_upscale():max_bytes(150000):strip_icc()/21014-Good-old-Fashioned-Pancakes-primary-4x3-c991bb30cf5a4078b61e3808b7ebcda8.jpg")
     )
 
     Column(
@@ -377,14 +377,16 @@ fun AnimatedRecipeCard(recipe: Recipe, index: Int) {
             horizontalArrangement = Arrangement.Start
         ) {
 
-            Image(
-                painter = painterResource(id = recipe.imageRes),
+            AsyncImage(
+                model = recipe.imageUrl,
                 contentDescription = null,
                 modifier = Modifier
                     .size(120.dp)
                     .padding(8.dp)
                     .clip(MaterialTheme.shapes.medium),
-                contentScale = ContentScale.Crop
+                contentScale = ContentScale.Crop,
+                error = painterResource(id = R.drawable.icon),    // Shows if loading failed
+                placeholder = painterResource(id = R.drawable.icon) // Shows during loading
             )
 
             Column(modifier = Modifier.weight(1f)) {
@@ -436,16 +438,27 @@ fun FavouritesScreen() {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            "Favourite Recipes",
+            "Favourite Recipes ⭐",
             style = MaterialTheme.typography.headlineMedium,
-            modifier = Modifier.padding(bottom = 16.dp)
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier
+                .padding(bottom = 16.dp),
+            fontWeight = FontWeight.Bold,
         )
 
         if (savedTitles.value.isEmpty()) {
-            Text("No favourites yet! ⭐")
+            Text(
+                "No favourites yet!",
+                style = MaterialTheme.typography.headlineLarge,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.
+                    padding( top = 116.dp),
+                fontWeight = FontWeight.Bold,
+            )
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 itemsIndexed(savedTitles.value) { _, title ->
@@ -466,7 +479,7 @@ fun FavouritesScreen() {
     }
 }
 
-// ----------------- PROFILE SCREEN (Compose) -----------------
+// ----------------- PROFILE SCREEN -----------------
 @Composable
 fun ProfileScreen() {
     val context = LocalContext.current
@@ -480,13 +493,20 @@ fun ProfileScreen() {
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
             "Profile",
-            style = MaterialTheme.typography.headlineMedium
+            style = MaterialTheme.typography.headlineMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(bottom = 16.dp),
+            fontWeight = FontWeight.Bold,
         )
-
+        AsyncImage(
+            model = "https://cdn-icons-png.flaticon.com/512/5987/5987424.png",
+            contentDescription = null,
+        )
         OutlinedTextField(
             value = username,
             onValueChange = { username = it },
@@ -511,7 +531,7 @@ fun ProfileScreen() {
                 Text("Save Profile")
             }
 
-            // Simple clear button
+            //clear button
             OutlinedButton(onClick = {
                 username = ""
                 fullName = ""

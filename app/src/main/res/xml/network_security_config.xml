@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">kitchensanctuary.com</domain>
+        <domain includeSubdomains="true">thegirlonbloor.com</domain>
+        <domain includeSubdomains="true">oliviaadriance.com</domain>
+        <domain includeSubdomains="true">allrecipes.com</domain>
+    </domain-config>
+</network-security-config>
