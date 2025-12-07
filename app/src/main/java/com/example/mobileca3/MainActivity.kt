@@ -37,11 +37,75 @@ import com.example.mobileca3.ui.theme.nunitoFont
 import kotlinx.coroutines.delay
 import coil.compose.AsyncImage
 
-
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
+import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
+import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
+import coil.compose.rememberAsyncImagePainter
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
+import retrofit2.http.GET
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.launch
+import androidx.lifecycle.ViewModel
 
 // Favourites Storer (titles only)
 //Temporary for functionality purposes**
 
+// Retrofit recipe grabber
+data class MealResponse(
+    val meals: List<Meal>?
+)
+
+data class Meal(
+    val idMeal: String,
+    val strMeal: String,
+    val strInstructions: String,
+    val strMealThumb: String
+)
+
+interface MealApi {
+    @GET("search.php?s=")
+    suspend fun getAllMeals(): MealResponse
+}
+
+object ApiClient {
+    val api: MealApi by lazy {
+        Retrofit.Builder()
+            .baseUrl("https://www.themealdb.com/api/json/v1/1/")
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(MealApi::class.java)
+    }
+}
+
+class MealRepository {
+    suspend fun loadMeals(): List<Meal> {
+        return ApiClient.api.getAllMeals().meals ?: emptyList()
+    }
+}
+
+class MealViewModel : ViewModel() {
+    private val repo = MealRepository()
+
+    var meals by mutableStateOf<List<Meal>>(emptyList())
+        private set
+
+    init {
+        fetchMeals()
+    }
+
+    private fun fetchMeals() {
+        // use viewModelScope (instance property), not the package-qualified name
+        viewModelScope.launch {
+            meals = repo.loadMeals()
+        }
+    }
+}
+
+// Managers
 object FavouriteManager {
     private const val PREFS = "favourites_prefs"
     private const val KEY = "favourite_titles"
@@ -59,6 +123,18 @@ object FavouriteManager {
         val updated = existing - recipe.title
         prefs.edit().putStringSet(KEY, updated).apply()
     }
+
+//    fun saveFavourite(context: Context, title: String) {
+//        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+//        val existing = prefs.getStringSet(KEY, mutableSetOf()) ?: mutableSetOf()
+//        prefs.edit().putStringSet(KEY, existing + title).apply()
+//    }
+//
+//    fun removeFavourite(context: Context, title: String) {
+//        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+//        val existing = prefs.getStringSet(KEY, mutableSetOf()) ?: mutableSetOf()
+//        prefs.edit().putStringSet(KEY, existing - title).apply()
+//    }
 
     fun getFavourites(context: Context): Set<String> {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -97,7 +173,7 @@ object ProfileManager {
         return prefs.getString(KEY_FULLNAME, "") ?: ""
     }
 }
-
+//////////////////////////////////////////
 data class Recipe(
     val title: String,
     val description: String,
@@ -105,18 +181,20 @@ data class Recipe(
 )
 
 class MainActivity : ComponentActivity() {
+    @OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-
+            val widthClass = calculateWindowSizeClass(this).widthSizeClass
             val systemIsDark = isSystemInDarkTheme()
             var darkTheme by remember { mutableStateOf(systemIsDark) }
 
             AppTheme(darkTheme = darkTheme) {
                 PocketChef(
                     darkTheme = darkTheme,
-                    onThemeUpdated = { darkTheme = !darkTheme }
+                    onThemeUpdated = { darkTheme = !darkTheme },
+                    widthClass = widthClass
                 )
             }
         }
@@ -124,7 +202,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun PocketChef(darkTheme: Boolean, onThemeUpdated: () -> Unit) {
+fun PocketChef(darkTheme: Boolean, onThemeUpdated: () -> Unit, widthClass: WindowWidthSizeClass) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
@@ -155,16 +233,17 @@ fun PocketChef(darkTheme: Boolean, onThemeUpdated: () -> Unit) {
             composable("home") {
                 HomeScreen(
                     darkTheme = darkTheme,
-                    onThemeUpdated = onThemeUpdated
+                    onThemeUpdated = onThemeUpdated,
+                    widthClass = widthClass
                 )
             }
 
             composable("favourites") {
-                FavouritesScreen()
+                FavouritesScreen(widthClass)
             }
 
             composable("profile") {
-                ProfileScreen()
+                ProfileScreen(widthClass)
             }
         }
     }
@@ -191,84 +270,165 @@ fun SplashScreen() {
 }
 
 @Composable
-fun HomeScreen(darkTheme: Boolean, onThemeUpdated: () -> Unit) {
+fun HomeScreen(darkTheme: Boolean, onThemeUpdated: () -> Unit, widthClass: WindowWidthSizeClass) {
+    val tablet = isTablet(widthClass)
+    val vm: MealViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 
     val context = LocalContext.current
-
     var username by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
         username = ProfileManager.getUsername(context)
     }
 
-
-    val sampleRecipes = listOf(
-        Recipe("Spaghetti Bolognese", "Rich tomato sauce with minced beef and herbs.", "https://www.kitchensanctuary.com/wp-content/uploads/2019/09/Spaghetti-Bolognese-square-FS-0204.jpg"),
-        Recipe("Chicken Stir Fry", "Quick, colorful vegetables with sticky soy glaze.", "https://thegirlonbloor.com/wp-content/uploads/2019/04/The-best-Beef-stir-fry-3-500x500.jpg"),
-        Recipe("Beef Tacos", "Seasoned beef with lettuce, cheese & salsa.", "https://oliviaadriance.com/wp-content/uploads/2023/07/Final_3_Crispy_Baked_Beef_Tacos_grain-free-dairy-free.jpg"),
-        Recipe("Garlic Butter Salmon", "Creamy, flaky salmon with herbs & lemon.", "https://www.kitchensanctuary.com/wp-content/uploads/2020/05/Honey-Garlic-Baked-Salmon-square-FS-111.jpg"),
-        Recipe("Pancakes & Syrup", "Fluffy stack with maple drizzle.", "https://www.allrecipes.com/thmb/TvmI_Fszqlu7ITqqhtj8l_JWqZo=/1500x0/filters:no_upscale():max_bytes(150000):strip_icc()/21014-Good-old-Fashioned-Pancakes-primary-4x3-c991bb30cf5a4078b61e3808b7ebcda8.jpg")
-    )
+    val horizontalPadding = if (tablet) 32.dp else 16.dp
+    val titleSize = if (tablet) 42.sp else 30.sp
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
+        Modifier.fillMaxSize().padding(horizontalPadding),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(Modifier.height(24.dp))
 
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End
         ) {
-            Switch(
-                checked = darkTheme,
-                onCheckedChange = { onThemeUpdated() }
-            )
-
-            Text(
-                text = "Dark Mode",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.secondary,
-                modifier = Modifier.padding(start = 8.dp)
-            )
+            Switch(checked = darkTheme, onCheckedChange = { onThemeUpdated() })
+            Text("Dark Mode", Modifier.padding(start = 8.dp))
         }
 
-        Spacer(modifier = Modifier.height(40.dp))
-        if (username.isEmpty()) {
-            AnimatedText(
-                text ="Pocket Chef",
-                style = MaterialTheme.typography.headlineLarge,
-                color = MaterialTheme.colorScheme.primary
-            )
-        } else {
-            AnimatedText(
-                text = "Hi Again, $username!",
-                style = MaterialTheme.typography.headlineLarge,
-                color = MaterialTheme.colorScheme.primary
-            )
-        }
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(Modifier.height(40.dp))
 
         AnimatedText(
-            text ="What's on Today's Menu?",
-            style = MaterialTheme.typography.headlineLarge,
+            text = if (username.isEmpty()) "Pocket Chef" else "Hi Again, $username!",
+            style = TextStyle(fontSize = titleSize, fontWeight = FontWeight.Bold),
             color = MaterialTheme.colorScheme.primary
         )
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(Modifier.height(8.dp))
 
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.fillMaxSize()
+        AnimatedText(
+            text = "What's on Today's Menu?",
+            style = TextStyle(fontSize = titleSize, fontWeight = FontWeight.Medium),
+            color = MaterialTheme.colorScheme.primary
+        )
+
+        Spacer(Modifier.height(16.dp))
+
+        val meals = vm.meals
+
+        if (meals.isEmpty()) {
+            CircularProgressIndicator()
+        } else {
+            if (tablet) {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    verticalArrangement = Arrangement.spacedBy(20.dp),
+                    horizontalArrangement = Arrangement.spacedBy(20.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    itemsIndexed(meals) { i, meal ->
+                        MealCard(meal, i, tablet)
+                    }
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    itemsIndexed(meals) { i, meal ->
+                        MealCard(meal, i, tablet)
+                    }
+                }
+            }
+        }
+    }
+}
+
+//Retrofit recipe card
+@Composable
+fun MealCard(meal: Meal, index: Int, tablet: Boolean) {
+    val context = LocalContext.current
+
+    var visible by remember { mutableStateOf(false) }
+    var favourite by remember { mutableStateOf(meal.strMeal in FavouriteManager.getFavourites(context)) }
+
+    LaunchedEffect(Unit) {
+        delay((index * 100).toLong())
+        visible = true
+    }
+
+    val offsetY by animateFloatAsState(
+        targetValue = if (visible) 0f else 60f,
+        animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMedium),
+        label = ""
+    )
+
+    val alpha by animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = tween(300),
+        label = ""
+    )
+
+    val imgSize = if (tablet) 160.dp else 120.dp
+
+    Card(
+        Modifier
+            .fillMaxWidth()
+            .graphicsLayer { translationY = offsetY; this.alpha = alpha }
+            .padding(6.dp)
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
         ) {
-            itemsIndexed(sampleRecipes) { index, recipe ->
-                AnimatedRecipeCard(recipe, index)
+            AsyncImage(
+                model = meal.strMealThumb,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(imgSize)
+                    .clip(MaterialTheme.shapes.medium),
+                contentScale = ContentScale.Crop,
+                error = painterResource(id = R.drawable.icon),
+                placeholder = painterResource(id = R.drawable.icon)
+            )
+
+            Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        meal.strMeal,
+                        style = if (tablet) MaterialTheme.typography.headlineSmall
+                        else MaterialTheme.typography.titleLarge
+                    )
+
+                    Icon(
+                        imageVector = if (favourite) Icons.Filled.Star else Icons.Outlined.Star,
+                        contentDescription = "Favourite",
+                        tint = if (favourite) Color(0xFFFFC107) else Color.Gray,
+                        modifier = Modifier
+                            .size(if (tablet) 34.dp else 28.dp)
+                            .clickable {
+                                favourite = !favourite
+                                if (favourite)
+                                    FavouriteManager.saveFavourite(context, Recipe(meal.strMeal, meal.strInstructions, meal.strMealThumb))
+                                else
+                                    FavouriteManager.removeFavourite(context, Recipe(meal.strMeal, meal.strInstructions, meal.strMealThumb))
+                            }
+                    )
+                }
+
+                Spacer(Modifier.height(6.dp))
+
+                Text(
+                    meal.strInstructions.take(140) + "...",
+                    style = MaterialTheme.typography.bodyMedium
+                )
             }
         }
     }
@@ -339,98 +499,100 @@ fun AnimatedText(
     )
 }
 
+//@Composable
+//fun AnimatedRecipeCard(recipe: Recipe, index: Int) {
+//    val context = LocalContext.current
+//
+//    var visible by remember { mutableStateOf(false) }
+//
+//    // read favourite once on composition and keep local state for toggling
+//    var favouriteState by remember { mutableStateOf(FavouriteManager.isFavourite(context, recipe)) }
+//
+//    LaunchedEffect(Unit) {
+//        delay((index * 100).toLong())
+//        visible = true
+//    }
+//
+//    val offsetY by animateFloatAsState(
+//        targetValue = if (visible) 0f else 60f,
+//        animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMedium),
+//        label = ""
+//    )
+//
+//    val alpha by animateFloatAsState(
+//        targetValue = if (visible) 1f else 0f,
+//        animationSpec = tween(300),
+//        label = ""
+//    )
+//    Card(
+//        modifier = Modifier
+//            .fillMaxWidth()
+//            .graphicsLayer { translationY = offsetY; this.alpha = alpha }
+//            .padding(6.dp)
+//    ) {
+//        Row(
+//            modifier = Modifier
+//                .fillMaxWidth()
+//                .padding(16.dp),
+//            horizontalArrangement = Arrangement.Start
+//        ) {
+//
+//            AsyncImage(
+//                model = recipe.imageUrl,
+//                contentDescription = null,
+//                modifier = Modifier
+//                    .size(120.dp)
+//                    .padding(8.dp)
+//                    .clip(MaterialTheme.shapes.medium),
+//                contentScale = ContentScale.Crop,
+//                error = painterResource(id = R.drawable.icon),    // Shows if loading failed
+//                placeholder = painterResource(id = R.drawable.icon) // Shows during loading
+//            )
+//
+//            Column(modifier = Modifier.weight(1f)) {
+//
+//                Row(
+//                    modifier = Modifier.fillMaxWidth(),
+//                    horizontalArrangement = Arrangement.SpaceBetween,
+//                    verticalAlignment = Alignment.CenterVertically
+//                ) {
+//                    Text(
+//                        text = recipe.title,
+//                        style = MaterialTheme.typography.titleLarge,
+//                        modifier = Modifier.weight(1f)
+//                    )
+//
+//                    Icon(
+//                        imageVector = if (favouriteState) Icons.Filled.Star else Icons.Outlined.Star,
+//                        contentDescription = "Toggle Favourite",
+//                        tint = if (favouriteState) Color(0xFFFFC107) else Color.Gray,
+//                        modifier = Modifier
+//                            .size(28.dp)
+//                            .clickable {
+//                                favouriteState = !favouriteState
+//                                if (favouriteState)
+//                                    FavouriteManager.saveFavourite(context, recipe)
+//                                else
+//                                    FavouriteManager.removeFavourite(context, recipe)
+//                            }
+//                    )
+//                }
+//
+//                Spacer(Modifier.height(6.dp))
+//
+//                Text(
+//                    text = recipe.description,
+//                    style = MaterialTheme.typography.bodyMedium
+//                )
+//            }
+//        }
+//    }
+//}
+
 @Composable
-fun AnimatedRecipeCard(recipe: Recipe, index: Int) {
-    val context = LocalContext.current
+fun FavouritesScreen(widthClass: WindowWidthSizeClass) {
+    val tablet = isTablet(widthClass)
 
-    var visible by remember { mutableStateOf(false) }
-
-    // read favourite once on composition and keep local state for toggling
-    var favouriteState by remember { mutableStateOf(FavouriteManager.isFavourite(context, recipe)) }
-
-    LaunchedEffect(Unit) {
-        delay((index * 100).toLong())
-        visible = true
-    }
-
-    val offsetY by animateFloatAsState(
-        targetValue = if (visible) 0f else 60f,
-        animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMedium),
-        label = ""
-    )
-
-    val alpha by animateFloatAsState(
-        targetValue = if (visible) 1f else 0f,
-        animationSpec = tween(300),
-        label = ""
-    )
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .graphicsLayer { translationY = offsetY; this.alpha = alpha }
-            .padding(6.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.Start
-        ) {
-
-            AsyncImage(
-                model = recipe.imageUrl,
-                contentDescription = null,
-                modifier = Modifier
-                    .size(120.dp)
-                    .padding(8.dp)
-                    .clip(MaterialTheme.shapes.medium),
-                contentScale = ContentScale.Crop,
-                error = painterResource(id = R.drawable.icon),    // Shows if loading failed
-                placeholder = painterResource(id = R.drawable.icon) // Shows during loading
-            )
-
-            Column(modifier = Modifier.weight(1f)) {
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = recipe.title,
-                        style = MaterialTheme.typography.titleLarge,
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    Icon(
-                        imageVector = if (favouriteState) Icons.Filled.Star else Icons.Outlined.Star,
-                        contentDescription = "Toggle Favourite",
-                        tint = if (favouriteState) Color(0xFFFFC107) else Color.Gray,
-                        modifier = Modifier
-                            .size(28.dp)
-                            .clickable {
-                                favouriteState = !favouriteState
-                                if (favouriteState)
-                                    FavouriteManager.saveFavourite(context, recipe)
-                                else
-                                    FavouriteManager.removeFavourite(context, recipe)
-                            }
-                    )
-                }
-
-                Spacer(Modifier.height(6.dp))
-
-                Text(
-                    text = recipe.description,
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun FavouritesScreen() {
     val context = LocalContext.current
     // Recompose when we return to screen: read latest favourites each composition
     val savedTitles = remember { mutableStateOf(FavouriteManager.getFavourites(context).toList()) }
@@ -438,12 +600,13 @@ fun FavouritesScreen() {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
+            .padding(if (tablet) 32.dp else 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
             "Favourite Recipes ⭐",
-            style = MaterialTheme.typography.headlineMedium,
+            style = if (tablet) MaterialTheme.typography.headlineLarge
+            else MaterialTheme.typography.headlineMedium,
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier
                 .padding(bottom = 16.dp),
@@ -481,7 +644,12 @@ fun FavouritesScreen() {
 
 // ----------------- PROFILE SCREEN -----------------
 @Composable
-fun ProfileScreen() {
+fun ProfileScreen(widthClass: WindowWidthSizeClass) {
+    val tablet = isTablet(widthClass)
+    val pad = if (tablet) 32.dp else 16.dp
+    val titleStyle = if (tablet) MaterialTheme.typography.headlineLarge
+    else MaterialTheme.typography.headlineMedium
+
     val context = LocalContext.current
 
     // Initialize state from SharedPreferences
@@ -492,13 +660,13 @@ fun ProfileScreen() {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+            .padding(pad),
+        verticalArrangement = Arrangement.spacedBy(if (tablet) 24.dp else 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
             "Profile",
-            style = MaterialTheme.typography.headlineMedium,
+            style = titleStyle,
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.padding(bottom = 16.dp),
             fontWeight = FontWeight.Bold,
@@ -558,4 +726,9 @@ fun ProfileScreen() {
         Text("Username: ${ProfileManager.getUsername(context)}")
         Text("Full name: ${ProfileManager.getFullName(context)}")
     }
+}
+
+@Composable
+fun isTablet(widthClass: WindowWidthSizeClass): Boolean {
+    return widthClass != WindowWidthSizeClass.Compact
 }
