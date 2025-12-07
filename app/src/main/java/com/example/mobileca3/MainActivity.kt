@@ -11,12 +11,18 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
+import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
+import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
+import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -103,18 +109,21 @@ data class Recipe(
 )
 
 class MainActivity : ComponentActivity() {
+    @OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
 
+            val widthClass = calculateWindowSizeClass(this).widthSizeClass
             val systemIsDark = isSystemInDarkTheme()
             var darkTheme by remember { mutableStateOf(systemIsDark) }
 
             AppTheme(darkTheme = darkTheme) {
                 PocketChef(
                     darkTheme = darkTheme,
-                    onThemeUpdated = { darkTheme = !darkTheme }
+                    onThemeUpdated = { darkTheme = !darkTheme },
+                    widthClass = widthClass
                 )
             }
         }
@@ -122,7 +131,9 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun PocketChef(darkTheme: Boolean, onThemeUpdated: () -> Unit) {
+fun PocketChef(darkTheme: Boolean,
+               onThemeUpdated: () -> Unit,
+               widthClass: WindowWidthSizeClass) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
@@ -153,18 +164,19 @@ fun PocketChef(darkTheme: Boolean, onThemeUpdated: () -> Unit) {
             composable("home") {
                 HomeScreen(
                     darkTheme = darkTheme,
-                    onThemeUpdated = onThemeUpdated
+                    onThemeUpdated = onThemeUpdated,
+                    widthClass = widthClass
                 )
             }
 
             // Favourites screen already present
             composable("favourites") {
-                FavouritesScreen()
+                FavouritesScreen(widthClass = widthClass)
             }
 
             // NEW: Profile route
             composable("profile") {
-                ProfileScreen()
+                ProfileScreen(widthClass = widthClass)
             }
         }
     }
@@ -191,9 +203,12 @@ fun SplashScreen() {
 }
 
 @Composable
-fun HomeScreen(darkTheme: Boolean, onThemeUpdated: () -> Unit) {
+fun HomeScreen(darkTheme: Boolean,
+               onThemeUpdated: () -> Unit,
+               widthClass: WindowWidthSizeClass) {
 
     val context = LocalContext.current
+    val tablet = isTablet(widthClass)
 
     var username by remember { mutableStateOf("") }
 
@@ -210,19 +225,26 @@ fun HomeScreen(darkTheme: Boolean, onThemeUpdated: () -> Unit) {
         Recipe("Pancakes & Syrup", "Fluffy stack with maple drizzle.", R.drawable.pancakes)
     )
 
+    val horizontalPadding = if (tablet) 32.dp else 16.dp
+    val topSpacing = if (tablet) 24.dp else 8.dp
+    val titleSize = if (tablet) 42.sp else 30.sp
+    val bodySize = if (tablet) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodySmall
+
+
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
+            .padding(horizontalPadding),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(topSpacing))
 
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp),
+                .padding(horizontalPadding),
             horizontalArrangement = Arrangement.End,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -233,42 +255,49 @@ fun HomeScreen(darkTheme: Boolean, onThemeUpdated: () -> Unit) {
 
             Text(
                 text = "Dark Mode",
-                style = MaterialTheme.typography.bodySmall,
+                style = bodySize,
                 color = MaterialTheme.colorScheme.secondary,
                 modifier = Modifier.padding(start = 8.dp)
             )
         }
 
         Spacer(modifier = Modifier.height(40.dp))
-        if (username.isEmpty()) {
-            AnimatedText(
-                text ="Pocket Chef",
-                style = MaterialTheme.typography.headlineLarge,
-                color = MaterialTheme.colorScheme.primary
-            )
-        } else {
-            AnimatedText(
-                text = "Hi Again, $username!",
-                style = MaterialTheme.typography.headlineLarge,
-                color = MaterialTheme.colorScheme.primary
-            )
-        }
+
+        AnimatedText(
+            text = if (username.isEmpty()) "Pocket Chef" else "Hi Again, $username!",
+            style = TextStyle(fontSize = titleSize, fontWeight = FontWeight.Bold),
+            color = MaterialTheme.colorScheme.primary
+        )
+
         Spacer(modifier = Modifier.height(8.dp))
 
         AnimatedText(
             text ="What's on Today's Menu?",
-            style = MaterialTheme.typography.headlineLarge,
+            style = TextStyle(fontSize = titleSize, fontWeight = FontWeight.Medium),
             color = MaterialTheme.colorScheme.primary
         )
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.fillMaxSize()
-        ) {
-            itemsIndexed(sampleRecipes) { index, recipe ->
-                AnimatedRecipeCard(recipe, index)
+        if (tablet) {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                verticalArrangement = Arrangement.spacedBy(20.dp),
+                horizontalArrangement = Arrangement.spacedBy(20.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                itemsIndexed(sampleRecipes) { index, recipe ->
+                    AnimatedRecipeCard(recipe, index, tablet)
+                }
+            }
+        } else {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                itemsIndexed(sampleRecipes) { index, recipe ->
+                    AnimatedRecipeCard(recipe, index, tablet)
+                }
             }
         }
     }
@@ -340,7 +369,7 @@ fun AnimatedText(
 }
 
 @Composable
-fun AnimatedRecipeCard(recipe: Recipe, index: Int) {
+fun AnimatedRecipeCard(recipe: Recipe, index: Int, tablet: Boolean) {
     val context = LocalContext.current
 
     var visible by remember { mutableStateOf(false) }
@@ -364,6 +393,13 @@ fun AnimatedRecipeCard(recipe: Recipe, index: Int) {
         animationSpec = tween(300),
         label = ""
     )
+
+    val imageSize = if (tablet) 160.dp else 120.dp
+    val padding = if (tablet) 16.dp else 16.dp
+    val titleStyle =
+        if (tablet) MaterialTheme.typography.headlineSmall
+        else MaterialTheme.typography.titleLarge
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -373,7 +409,7 @@ fun AnimatedRecipeCard(recipe: Recipe, index: Int) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(padding),
             horizontalArrangement = Arrangement.Start
         ) {
 
@@ -381,8 +417,8 @@ fun AnimatedRecipeCard(recipe: Recipe, index: Int) {
                 painter = painterResource(id = recipe.imageRes),
                 contentDescription = null,
                 modifier = Modifier
-                    .size(120.dp)
-                    .padding(8.dp)
+                    .size(imageSize)
+                    .padding(padding)
                     .clip(MaterialTheme.shapes.medium),
                 contentScale = ContentScale.Crop
             )
@@ -396,7 +432,7 @@ fun AnimatedRecipeCard(recipe: Recipe, index: Int) {
                 ) {
                     Text(
                         text = recipe.title,
-                        style = MaterialTheme.typography.titleLarge,
+                        style = titleStyle,
                         modifier = Modifier.weight(1f)
                     )
 
@@ -405,7 +441,7 @@ fun AnimatedRecipeCard(recipe: Recipe, index: Int) {
                         contentDescription = "Toggle Favourite",
                         tint = if (favouriteState) Color(0xFFFFC107) else Color.Gray,
                         modifier = Modifier
-                            .size(28.dp)
+                            .size(if (tablet) 34.dp else 28.dp)
                             .clickable {
                                 favouriteState = !favouriteState
                                 if (favouriteState)
@@ -428,37 +464,37 @@ fun AnimatedRecipeCard(recipe: Recipe, index: Int) {
 }
 
 @Composable
-fun FavouritesScreen() {
+fun FavouritesScreen(widthClass: WindowWidthSizeClass) {
+    val tablet = isTablet(widthClass)
+    val padding = if (tablet) 32.dp else 16.dp
+    val titleStyle =
+        if (tablet) MaterialTheme.typography.headlineLarge
+        else MaterialTheme.typography.headlineMedium
+    val bodyStyle =
+        if (tablet) MaterialTheme.typography.bodyLarge
+        else MaterialTheme.typography.bodyMedium
+
     val context = LocalContext.current
-    // Recompose when we return to screen: read latest favourites each composition
-    val savedTitles = remember { mutableStateOf(FavouriteManager.getFavourites(context).toList()) }
+    val savedTitles = remember {
+        mutableStateOf(FavouriteManager.getFavourites(context).toList())
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .padding(padding)
     ) {
-        Text(
-            "Favourite Recipes",
-            style = MaterialTheme.typography.headlineMedium,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
+        Text("Favourite Recipes", style = titleStyle)
+
+        Spacer(Modifier.height(16.dp))
 
         if (savedTitles.value.isEmpty()) {
-            Text("No favourites yet! ⭐")
+            Text("No favourites yet!")
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 itemsIndexed(savedTitles.value) { _, title ->
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(4.dp)
-                    ) {
-                        Text(
-                            text = title,
-                            modifier = Modifier.padding(16.dp),
-                            style = MaterialTheme.typography.titleMedium
-                        )
+                    Card(Modifier.fillMaxWidth()) {
+                        Text(title, Modifier.padding(24.dp), style = bodyStyle)
                     }
                 }
             }
@@ -466,12 +502,18 @@ fun FavouritesScreen() {
     }
 }
 
+
 // ----------------- PROFILE SCREEN (Compose) -----------------
 @Composable
-fun ProfileScreen() {
+fun ProfileScreen(widthClass: WindowWidthSizeClass) {
+    val tablet = isTablet(widthClass)
+    val padding = if (tablet) 32.dp else 16.dp
+    val titleStyle =
+        if (tablet) MaterialTheme.typography.headlineLarge
+        else MaterialTheme.typography.headlineMedium
+
     val context = LocalContext.current
 
-    // Initialize state from SharedPreferences
     var username by remember { mutableStateOf(ProfileManager.getUsername(context)) }
     var fullName by remember { mutableStateOf(ProfileManager.getFullName(context)) }
     var savedConfirmation by remember { mutableStateOf(false) }
@@ -479,63 +521,57 @@ fun ProfileScreen() {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .padding(padding),
+        verticalArrangement = Arrangement.spacedBy(if (tablet) 24.dp else 16.dp)
     ) {
-        Text(
-            "Profile",
-            style = MaterialTheme.typography.headlineMedium
-        )
+        Text("Profile", style = titleStyle)
 
         OutlinedTextField(
             value = username,
             onValueChange = { username = it },
             label = { Text("Username") },
-            singleLine = true,
             modifier = Modifier.fillMaxWidth()
         )
 
         OutlinedTextField(
             value = fullName,
             onValueChange = { fullName = it },
-            label = { Text("Full name") },
-            singleLine = true,
+            label = { Text("Full Name") },
             modifier = Modifier.fillMaxWidth()
         )
 
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
             Button(onClick = {
                 ProfileManager.saveProfile(context, username.trim(), fullName.trim())
                 savedConfirmation = true
-            }) {
-                Text("Save Profile")
-            }
+            }) { Text("Save") }
 
-            // Simple clear button
             OutlinedButton(onClick = {
                 username = ""
                 fullName = ""
                 ProfileManager.saveProfile(context, "", "")
                 savedConfirmation = false
-            }) {
-                Text("Clear")
-            }
+            }) { Text("Clear") }
         }
 
         if (savedConfirmation) {
-            Text(
-                text = "Profile saved.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.primary
-            )
+            Text("Profile saved.", color = MaterialTheme.colorScheme.primary)
         }
 
-        Spacer(modifier = Modifier.weight(1f))
+        Spacer(Modifier.weight(1f))
 
-        // Show saved profile summary
         Divider()
-        Text("Saved profile:", style = MaterialTheme.typography.titleSmall)
+        Text("Saved profile:")
         Text("Username: ${ProfileManager.getUsername(context)}")
         Text("Full name: ${ProfileManager.getFullName(context)}")
     }
+}
+
+
+@Composable
+fun isTablet(widthClass: WindowWidthSizeClass): Boolean {
+    return widthClass != WindowWidthSizeClass.Compact
 }
