@@ -18,7 +18,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Star
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
@@ -38,46 +37,90 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import androidx.navigation.compose.*
+import coil.compose.rememberAsyncImagePainter
 import com.example.compose.AppTheme
-import com.example.mobileca3.ui.theme.nunitoFont
 import kotlinx.coroutines.delay
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
+import retrofit2.http.GET
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.launch
+import androidx.lifecycle.ViewModel
+data class MealResponse(
+    val meals: List<Meal>?
+)
 
+data class Meal(
+    val idMeal: String,
+    val strMeal: String,
+    val strInstructions: String,
+    val strMealThumb: String
+)
 
-// Favourites Storer (titles only)
-//Temporary for functionality purposes**
+interface MealApi {
+    @GET("search.php?s=")
+    suspend fun getAllMeals(): MealResponse
+}
+
+object ApiClient {
+    val api: MealApi by lazy {
+        Retrofit.Builder()
+            .baseUrl("https://www.themealdb.com/api/json/v1/1/")
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(MealApi::class.java)
+    }
+}
+
+class MealRepository {
+    suspend fun loadMeals(): List<Meal> {
+        return ApiClient.api.getAllMeals().meals ?: emptyList()
+    }
+}
+
+class MealViewModel : ViewModel() {
+    private val repo = MealRepository()
+
+    var meals by mutableStateOf<List<Meal>>(emptyList())
+        private set
+
+    init {
+        fetchMeals()
+    }
+
+    private fun fetchMeals() {
+        // use viewModelScope (instance property), not the package-qualified name
+        viewModelScope.launch {
+            meals = repo.loadMeals()
+        }
+    }
+}
+
 
 object FavouriteManager {
     private const val PREFS = "favourites_prefs"
     private const val KEY = "favourite_titles"
 
-    fun saveFavourite(context: Context, recipe: Recipe) {
+    fun saveFavourite(context: Context, title: String) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val existing = prefs.getStringSet(KEY, mutableSetOf()) ?: mutableSetOf()
-        val updated = existing + recipe.title
-        prefs.edit().putStringSet(KEY, updated).apply()
+        prefs.edit().putStringSet(KEY, existing + title).apply()
     }
 
-    fun removeFavourite(context: Context, recipe: Recipe) {
+    fun removeFavourite(context: Context, title: String) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val existing = prefs.getStringSet(KEY, mutableSetOf()) ?: mutableSetOf()
-        val updated = existing - recipe.title
-        prefs.edit().putStringSet(KEY, updated).apply()
+        prefs.edit().putStringSet(KEY, existing - title).apply()
     }
 
     fun getFavourites(context: Context): Set<String> {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         return prefs.getStringSet(KEY, emptySet()) ?: emptySet()
     }
-
-    fun isFavourite(context: Context, recipe: Recipe): Boolean {
-        return getFavourites(context).contains(recipe.title)
-    }
 }
 
-//Temporary for functionality purposes**
-// Profile storer(username + fullname)
-// Saves two simple strings to SharedPreferences.
-// Keys: "profile_username", "profile_fullname"
+
+// PROFILE
 object ProfileManager {
     private const val PREFS = "profile_prefs"
     private const val KEY_USERNAME = "profile_username"
@@ -102,19 +145,12 @@ object ProfileManager {
     }
 }
 
-data class Recipe(
-    val title: String,
-    val description: String,
-    val imageRes: Int
-)
-
 class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-
             val widthClass = calculateWindowSizeClass(this).widthSizeClass
             val systemIsDark = isSystemInDarkTheme()
             var darkTheme by remember { mutableStateOf(systemIsDark) }
@@ -131,52 +167,39 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun PocketChef(darkTheme: Boolean,
-               onThemeUpdated: () -> Unit,
-               widthClass: WindowWidthSizeClass) {
+fun PocketChef(darkTheme: Boolean, onThemeUpdated: () -> Unit, widthClass: WindowWidthSizeClass) {
     val navController = rememberNavController()
-    val navBackStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = navBackStackEntry?.destination?.route
+    val navBackStack by navController.currentBackStackEntryAsState()
+    val route = navBackStack?.destination?.route
 
     Scaffold(
         bottomBar = {
-            if (currentRoute != "splash") {
-                BottomNavigationBar(navController, currentRoute)
-            }
+            if (route != "splash") BottomNavigationBar(navController, route)
         }
-    ) { innerPadding ->
+    ) { pad ->
         NavHost(
             navController = navController,
             startDestination = "splash",
-            modifier = Modifier.padding(innerPadding)
+            modifier = Modifier.padding(pad)
         ) {
-
             composable("splash") {
                 SplashScreen()
                 LaunchedEffect(Unit) {
-                    delay(500)
-                    navController.navigate("home") {
-                        popUpTo("splash") { inclusive = true }
-                    }
+                    delay(700)
+                    navController.navigate("home") { popUpTo("splash") { inclusive = true } }
                 }
             }
 
             composable("home") {
-                HomeScreen(
-                    darkTheme = darkTheme,
-                    onThemeUpdated = onThemeUpdated,
-                    widthClass = widthClass
-                )
+                HomeScreen(darkTheme, onThemeUpdated, widthClass)
             }
 
-            // Favourites screen already present
             composable("favourites") {
-                FavouritesScreen(widthClass = widthClass)
+                FavouritesScreen(widthClass)
             }
 
-            // NEW: Profile route
             composable("profile") {
-                ProfileScreen(widthClass = widthClass)
+                ProfileScreen(widthClass)
             }
         }
     }
@@ -185,83 +208,47 @@ fun PocketChef(darkTheme: Boolean,
 @Composable
 fun SplashScreen() {
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
+        Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
         Image(
             painter = painterResource(id = R.drawable.icon),
-            contentDescription = "Pocket Chef",
-            modifier = Modifier
-                .size(120.dp)
-                .padding(8.dp)
-                .clip(MaterialTheme.shapes.medium),
-            contentScale = ContentScale.Crop
+            contentDescription = "Logo",
+            modifier = Modifier.size(140.dp)
         )
     }
 }
 
 @Composable
-fun HomeScreen(darkTheme: Boolean,
-               onThemeUpdated: () -> Unit,
-               widthClass: WindowWidthSizeClass) {
+fun HomeScreen(darkTheme: Boolean, onThemeUpdated: () -> Unit, widthClass: WindowWidthSizeClass) {
+    val tablet = isTablet(widthClass)
+    val vm: MealViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 
     val context = LocalContext.current
-    val tablet = isTablet(widthClass)
-
     var username by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
         username = ProfileManager.getUsername(context)
     }
 
-
-    val sampleRecipes = listOf(
-        Recipe("Spaghetti Bolognese", "Rich tomato sauce with minced beef and herbs.", R.drawable.spagbol),
-        Recipe("Chicken Stir Fry", "Quick, colorful vegetables with sticky soy glaze.", R.drawable.stirfry),
-        Recipe("Beef Tacos", "Seasoned beef with lettuce, cheese & salsa.", R.drawable.tacos),
-        Recipe("Garlic Butter Salmon", "Creamy, flaky salmon with herbs & lemon.", R.drawable.salmon),
-        Recipe("Pancakes & Syrup", "Fluffy stack with maple drizzle.", R.drawable.pancakes)
-    )
-
     val horizontalPadding = if (tablet) 32.dp else 16.dp
-    val topSpacing = if (tablet) 24.dp else 8.dp
     val titleSize = if (tablet) 42.sp else 30.sp
-    val bodySize = if (tablet) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodySmall
-
-
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontalPadding),
+        Modifier.fillMaxSize().padding(horizontalPadding),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-
-        Spacer(modifier = Modifier.height(topSpacing))
+        Spacer(Modifier.height(24.dp))
 
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontalPadding),
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End
         ) {
-            Switch(
-                checked = darkTheme,
-                onCheckedChange = { onThemeUpdated() }
-            )
-
-            Text(
-                text = "Dark Mode",
-                style = bodySize,
-                color = MaterialTheme.colorScheme.secondary,
-                modifier = Modifier.padding(start = 8.dp)
-            )
+            Switch(checked = darkTheme, onCheckedChange = { onThemeUpdated() })
+            Text("Dark Mode", Modifier.padding(start = 8.dp))
         }
 
-        Spacer(modifier = Modifier.height(40.dp))
+        Spacer(Modifier.height(40.dp))
 
         AnimatedText(
             text = if (username.isEmpty()) "Pocket Chef" else "Hi Again, $username!",
@@ -269,34 +256,40 @@ fun HomeScreen(darkTheme: Boolean,
             color = MaterialTheme.colorScheme.primary
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(Modifier.height(8.dp))
 
         AnimatedText(
-            text ="What's on Today's Menu?",
+            text = "What's on Today's Menu?",
             style = TextStyle(fontSize = titleSize, fontWeight = FontWeight.Medium),
             color = MaterialTheme.colorScheme.primary
         )
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(Modifier.height(16.dp))
 
-        if (tablet) {
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
-                verticalArrangement = Arrangement.spacedBy(20.dp),
-                horizontalArrangement = Arrangement.spacedBy(20.dp),
-                modifier = Modifier.fillMaxSize()
-            ) {
-                itemsIndexed(sampleRecipes) { index, recipe ->
-                    AnimatedRecipeCard(recipe, index, tablet)
-                }
-            }
+        val meals = vm.meals
+
+        if (meals.isEmpty()) {
+            CircularProgressIndicator()
         } else {
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.fillMaxSize()
-            ) {
-                itemsIndexed(sampleRecipes) { index, recipe ->
-                    AnimatedRecipeCard(recipe, index, tablet)
+            if (tablet) {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    verticalArrangement = Arrangement.spacedBy(20.dp),
+                    horizontalArrangement = Arrangement.spacedBy(20.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    itemsIndexed(meals) { i, meal ->
+                        MealCard(meal, i, tablet)
+                    }
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    itemsIndexed(meals) { i, meal ->
+                        MealCard(meal, i, tablet)
+                    }
                 }
             }
         }
@@ -304,78 +297,10 @@ fun HomeScreen(darkTheme: Boolean,
 }
 
 @Composable
-fun BottomNavigationBar(navController: NavController, currentRoute: String?) {
-    NavigationBar {
-        NavigationBarItem(
-            icon = { Icon(Icons.Filled.Home, null) },
-            label = { Text("Home") },
-            selected = currentRoute == "home",
-            onClick = { navController.navigate("home") }
-        )
-
-        NavigationBarItem(
-            icon = { Icon(Icons.Filled.Favorite, null) },
-            label = { Text("Favourites") },
-            selected = currentRoute == "favourites",
-            onClick = { navController.navigate("favourites") }
-        )
-
-        NavigationBarItem(
-            icon = { Icon(Icons.Filled.Person, null) },
-            label = { Text("Profile") },
-            selected = currentRoute == "profile",
-            onClick = { navController.navigate("profile") }
-        )
-    }
-}
-
-@Composable
-fun AnimatedText(
-    text: String,
-    style: TextStyle = MaterialTheme.typography.bodyLarge,
-    color: Color = MaterialTheme.colorScheme.onBackground,
-    modifier: Modifier = Modifier
-) {
-    var visible by remember { mutableStateOf(false) }
-
-    LaunchedEffect(Unit) {
-        visible = true
-    }
-
-    val yOffset by animateFloatAsState(
-        targetValue = if (visible) 0f else 40f,
-        animationSpec = tween(2000, easing = FastOutSlowInEasing)
-    )
-    val scale by animateFloatAsState(
-        targetValue = if (visible) 1f else 0.8f,
-        animationSpec = tween(2000, easing = FastOutSlowInEasing)
-    )
-    val alpha by animateFloatAsState(
-        targetValue = if (visible) 1f else 0f,
-        animationSpec = tween(2000, easing = LinearOutSlowInEasing)
-    )
-
-    Text(
-        text = text,
-        style = style,
-        color = color,
-        modifier = modifier.graphicsLayer(
-            translationY = yOffset,
-            scaleX = scale,
-            scaleY = scale,
-            alpha = alpha
-        )
-    )
-}
-
-@Composable
-fun AnimatedRecipeCard(recipe: Recipe, index: Int, tablet: Boolean) {
+fun MealCard(meal: Meal, index: Int, tablet: Boolean) {
     val context = LocalContext.current
-
+    var favourite by remember { mutableStateOf(meal.strMeal in FavouriteManager.getFavourites(context)) }
     var visible by remember { mutableStateOf(false) }
-
-    // read favourite once on composition and keep local state for toggling
-    var favouriteState by remember { mutableStateOf(FavouriteManager.isFavourite(context, recipe)) }
 
     LaunchedEffect(Unit) {
         delay((index * 100).toLong())
@@ -384,7 +309,7 @@ fun AnimatedRecipeCard(recipe: Recipe, index: Int, tablet: Boolean) {
 
     val offsetY by animateFloatAsState(
         targetValue = if (visible) 0f else 60f,
-        animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMedium),
+        animationSpec = spring(dampingRatio = 0.65f),
         label = ""
     )
 
@@ -394,60 +319,51 @@ fun AnimatedRecipeCard(recipe: Recipe, index: Int, tablet: Boolean) {
         label = ""
     )
 
-    val imageSize = if (tablet) 160.dp else 120.dp
-    val padding = if (tablet) 16.dp else 16.dp
-    val titleStyle =
-        if (tablet) MaterialTheme.typography.headlineSmall
-        else MaterialTheme.typography.titleLarge
+    val imgSize = if (tablet) 160.dp else 120.dp
 
     Card(
-        modifier = Modifier
+        Modifier
             .fillMaxWidth()
             .graphicsLayer { translationY = offsetY; this.alpha = alpha }
             .padding(6.dp)
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(padding),
-            horizontalArrangement = Arrangement.Start
+            Modifier.fillMaxWidth().padding(16.dp)
         ) {
-
             Image(
-                painter = painterResource(id = recipe.imageRes),
+                painter = rememberAsyncImagePainter(meal.strMealThumb),
                 contentDescription = null,
                 modifier = Modifier
-                    .size(imageSize)
-                    .padding(padding)
+                    .size(imgSize)
                     .clip(MaterialTheme.shapes.medium),
                 contentScale = ContentScale.Crop
             )
 
-            Column(modifier = Modifier.weight(1f)) {
+            Column(Modifier.weight(1f).padding(start = 12.dp)) {
 
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = recipe.title,
-                        style = titleStyle,
-                        modifier = Modifier.weight(1f)
+                        meal.strMeal,
+                        style = if (tablet) MaterialTheme.typography.headlineSmall
+                        else MaterialTheme.typography.titleLarge
                     )
 
                     Icon(
-                        imageVector = if (favouriteState) Icons.Filled.Star else Icons.Outlined.Star,
-                        contentDescription = "Toggle Favourite",
-                        tint = if (favouriteState) Color(0xFFFFC107) else Color.Gray,
+                        imageVector = if (favourite) Icons.Filled.Star else Icons.Outlined.Star,
+                        contentDescription = "Favourite",
+                        tint = if (favourite) Color(0xFFFFC107) else Color.Gray,
                         modifier = Modifier
                             .size(if (tablet) 34.dp else 28.dp)
                             .clickable {
-                                favouriteState = !favouriteState
-                                if (favouriteState)
-                                    FavouriteManager.saveFavourite(context, recipe)
+                                favourite = !favourite
+                                if (favourite)
+                                    FavouriteManager.saveFavourite(context, meal.strMeal)
                                 else
-                                    FavouriteManager.removeFavourite(context, recipe)
+                                    FavouriteManager.removeFavourite(context, meal.strMeal)
                             }
                     )
                 }
@@ -455,7 +371,7 @@ fun AnimatedRecipeCard(recipe: Recipe, index: Int, tablet: Boolean) {
                 Spacer(Modifier.height(6.dp))
 
                 Text(
-                    text = recipe.description,
+                    meal.strInstructions.take(140) + "...",
                     style = MaterialTheme.typography.bodyMedium
                 )
             }
@@ -466,35 +382,26 @@ fun AnimatedRecipeCard(recipe: Recipe, index: Int, tablet: Boolean) {
 @Composable
 fun FavouritesScreen(widthClass: WindowWidthSizeClass) {
     val tablet = isTablet(widthClass)
-    val padding = if (tablet) 32.dp else 16.dp
-    val titleStyle =
-        if (tablet) MaterialTheme.typography.headlineLarge
-        else MaterialTheme.typography.headlineMedium
-    val bodyStyle =
-        if (tablet) MaterialTheme.typography.bodyLarge
-        else MaterialTheme.typography.bodyMedium
-
     val context = LocalContext.current
-    val savedTitles = remember {
-        mutableStateOf(FavouriteManager.getFavourites(context).toList())
-    }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(padding)
-    ) {
-        Text("Favourite Recipes", style = titleStyle)
+    val favourites = FavouriteManager.getFavourites(context).toList()
+
+    Column(Modifier.fillMaxSize().padding(if (tablet) 32.dp else 16.dp)) {
+        Text(
+            "Favourite Recipes",
+            style = if (tablet) MaterialTheme.typography.headlineLarge
+            else MaterialTheme.typography.headlineMedium
+        )
 
         Spacer(Modifier.height(16.dp))
 
-        if (savedTitles.value.isEmpty()) {
+        if (favourites.isEmpty()) {
             Text("No favourites yet!")
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                itemsIndexed(savedTitles.value) { _, title ->
+                itemsIndexed(favourites) { _, title ->
                     Card(Modifier.fillMaxWidth()) {
-                        Text(title, Modifier.padding(24.dp), style = bodyStyle)
+                        Text(title, Modifier.padding(24.dp))
                     }
                 }
             }
@@ -502,26 +409,21 @@ fun FavouritesScreen(widthClass: WindowWidthSizeClass) {
     }
 }
 
-
-// ----------------- PROFILE SCREEN (Compose) -----------------
 @Composable
 fun ProfileScreen(widthClass: WindowWidthSizeClass) {
     val tablet = isTablet(widthClass)
-    val padding = if (tablet) 32.dp else 16.dp
-    val titleStyle =
-        if (tablet) MaterialTheme.typography.headlineLarge
-        else MaterialTheme.typography.headlineMedium
+    val pad = if (tablet) 32.dp else 16.dp
+    val titleStyle = if (tablet) MaterialTheme.typography.headlineLarge
+    else MaterialTheme.typography.headlineMedium
 
     val context = LocalContext.current
 
     var username by remember { mutableStateOf(ProfileManager.getUsername(context)) }
     var fullName by remember { mutableStateOf(ProfileManager.getFullName(context)) }
-    var savedConfirmation by remember { mutableStateOf(false) }
+    var saved by remember { mutableStateOf(false) }
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(padding),
+        Modifier.fillMaxSize().padding(pad),
         verticalArrangement = Arrangement.spacedBy(if (tablet) 24.dp else 16.dp)
     ) {
         Text("Profile", style = titleStyle)
@@ -540,36 +442,91 @@ fun ProfileScreen(widthClass: WindowWidthSizeClass) {
             modifier = Modifier.fillMaxWidth()
         )
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Button(onClick = {
                 ProfileManager.saveProfile(context, username.trim(), fullName.trim())
-                savedConfirmation = true
+                saved = true
             }) { Text("Save") }
 
             OutlinedButton(onClick = {
                 username = ""
                 fullName = ""
                 ProfileManager.saveProfile(context, "", "")
-                savedConfirmation = false
+                saved = false
             }) { Text("Clear") }
         }
 
-        if (savedConfirmation) {
-            Text("Profile saved.", color = MaterialTheme.colorScheme.primary)
-        }
+        if (saved) Text("Profile saved.", color = MaterialTheme.colorScheme.primary)
 
         Spacer(Modifier.weight(1f))
 
         Divider()
+
         Text("Saved profile:")
         Text("Username: ${ProfileManager.getUsername(context)}")
         Text("Full name: ${ProfileManager.getFullName(context)}")
     }
 }
 
+@Composable
+fun BottomNavigationBar(navController: NavController, route: String?) {
+    NavigationBar {
+        NavigationBarItem(
+            selected = route == "home",
+            onClick = { navController.navigate("home") },
+            icon = { Icon(Icons.Filled.Home, null) },
+            label = { Text("Home") }
+        )
+
+        NavigationBarItem(
+            selected = route == "favourites",
+            onClick = { navController.navigate("favourites") },
+            icon = { Icon(Icons.Filled.Favorite, null) },
+            label = { Text("Favourites") }
+        )
+
+        NavigationBarItem(
+            selected = route == "profile",
+            onClick = { navController.navigate("profile") },
+            icon = { Icon(Icons.Filled.Person, null) },
+            label = { Text("Profile") }
+        )
+    }
+}
+
+@Composable
+fun AnimatedText(
+    text: String,
+    style: TextStyle,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    var visible by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) { visible = true }
+
+    val yOffset by animateFloatAsState(
+        targetValue = if (visible) 0f else 40f,
+        animationSpec = tween(1800, easing = FastOutSlowInEasing),
+        label = ""
+    )
+
+    val alpha by animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = tween(1800),
+        label = ""
+    )
+
+    Text(
+        text = text,
+        style = style,
+        color = color,
+        modifier = modifier.graphicsLayer(
+            translationY = yOffset,
+            alpha = alpha
+        )
+    )
+}
 
 @Composable
 fun isTablet(widthClass: WindowWidthSizeClass): Boolean {
