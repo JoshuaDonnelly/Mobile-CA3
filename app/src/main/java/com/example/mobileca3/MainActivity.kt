@@ -2,6 +2,7 @@ package com.example.mobileca3
 
 import android.content.Context
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -50,10 +51,6 @@ import retrofit2.http.GET
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.launch
 import androidx.lifecycle.ViewModel
-
-// Favourites Storer (titles only)
-//Temporary for functionality purposes**
-
 // Retrofit recipe grabber
 data class MealResponse(
     val meals: List<Meal>?
@@ -124,17 +121,7 @@ object FavouriteManager {
         prefs.edit().putStringSet(KEY, updated).apply()
     }
 
-//    fun saveFavourite(context: Context, title: String) {
-//        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-//        val existing = prefs.getStringSet(KEY, mutableSetOf()) ?: mutableSetOf()
-//        prefs.edit().putStringSet(KEY, existing + title).apply()
-//    }
-//
-//    fun removeFavourite(context: Context, title: String) {
-//        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-//        val existing = prefs.getStringSet(KEY, mutableSetOf()) ?: mutableSetOf()
-//        prefs.edit().putStringSet(KEY, existing - title).apply()
-//    }
+
 
     fun getFavourites(context: Context): Set<String> {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -146,7 +133,6 @@ object FavouriteManager {
     }
 }
 
-//Temporary for functionality purposes**
 // Profile storer(username + fullname)
 // Saves two simple strings to SharedPreferences.
 // Keys: "profile_username", "profile_fullname"
@@ -173,7 +159,7 @@ object ProfileManager {
         return prefs.getString(KEY_FULLNAME, "") ?: ""
     }
 }
-//////////////////////////////////////////
+//Recipe data class to be used in the animated cards (MealCard)
 data class Recipe(
     val title: String,
     val description: String,
@@ -201,6 +187,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+//Here is where we have all our routes, call our nav bar
 @Composable
 fun PocketChef(darkTheme: Boolean, onThemeUpdated: () -> Unit, widthClass: WindowWidthSizeClass) {
     val navController = rememberNavController()
@@ -498,97 +485,7 @@ fun AnimatedText(
         )
     )
 }
-
-//@Composable
-//fun AnimatedRecipeCard(recipe: Recipe, index: Int) {
-//    val context = LocalContext.current
-//
-//    var visible by remember { mutableStateOf(false) }
-//
-//    // read favourite once on composition and keep local state for toggling
-//    var favouriteState by remember { mutableStateOf(FavouriteManager.isFavourite(context, recipe)) }
-//
-//    LaunchedEffect(Unit) {
-//        delay((index * 100).toLong())
-//        visible = true
-//    }
-//
-//    val offsetY by animateFloatAsState(
-//        targetValue = if (visible) 0f else 60f,
-//        animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMedium),
-//        label = ""
-//    )
-//
-//    val alpha by animateFloatAsState(
-//        targetValue = if (visible) 1f else 0f,
-//        animationSpec = tween(300),
-//        label = ""
-//    )
-//    Card(
-//        modifier = Modifier
-//            .fillMaxWidth()
-//            .graphicsLayer { translationY = offsetY; this.alpha = alpha }
-//            .padding(6.dp)
-//    ) {
-//        Row(
-//            modifier = Modifier
-//                .fillMaxWidth()
-//                .padding(16.dp),
-//            horizontalArrangement = Arrangement.Start
-//        ) {
-//
-//            AsyncImage(
-//                model = recipe.imageUrl,
-//                contentDescription = null,
-//                modifier = Modifier
-//                    .size(120.dp)
-//                    .padding(8.dp)
-//                    .clip(MaterialTheme.shapes.medium),
-//                contentScale = ContentScale.Crop,
-//                error = painterResource(id = R.drawable.icon),    // Shows if loading failed
-//                placeholder = painterResource(id = R.drawable.icon) // Shows during loading
-//            )
-//
-//            Column(modifier = Modifier.weight(1f)) {
-//
-//                Row(
-//                    modifier = Modifier.fillMaxWidth(),
-//                    horizontalArrangement = Arrangement.SpaceBetween,
-//                    verticalAlignment = Alignment.CenterVertically
-//                ) {
-//                    Text(
-//                        text = recipe.title,
-//                        style = MaterialTheme.typography.titleLarge,
-//                        modifier = Modifier.weight(1f)
-//                    )
-//
-//                    Icon(
-//                        imageVector = if (favouriteState) Icons.Filled.Star else Icons.Outlined.Star,
-//                        contentDescription = "Toggle Favourite",
-//                        tint = if (favouriteState) Color(0xFFFFC107) else Color.Gray,
-//                        modifier = Modifier
-//                            .size(28.dp)
-//                            .clickable {
-//                                favouriteState = !favouriteState
-//                                if (favouriteState)
-//                                    FavouriteManager.saveFavourite(context, recipe)
-//                                else
-//                                    FavouriteManager.removeFavourite(context, recipe)
-//                            }
-//                    )
-//                }
-//
-//                Spacer(Modifier.height(6.dp))
-//
-//                Text(
-//                    text = recipe.description,
-//                    style = MaterialTheme.typography.bodyMedium
-//                )
-//            }
-//        }
-//    }
-//}
-
+//Screen 2 (Favourites)
 @Composable
 fun FavouritesScreen(widthClass: WindowWidthSizeClass) {
     val tablet = isTablet(widthClass)
@@ -596,6 +493,7 @@ fun FavouritesScreen(widthClass: WindowWidthSizeClass) {
     val context = LocalContext.current
     // Recompose when we return to screen: read latest favourites each composition
     val savedTitles = remember { mutableStateOf(FavouriteManager.getFavourites(context).toList()) }
+    Log.d("Pocket Chef (Favs)", "Favourites List: ${savedTitles.value}")
 
     Column(
         modifier = Modifier
@@ -642,7 +540,7 @@ fun FavouritesScreen(widthClass: WindowWidthSizeClass) {
     }
 }
 
-// ----------------- PROFILE SCREEN -----------------
+// Screen 3 (Profile)
 @Composable
 fun ProfileScreen(widthClass: WindowWidthSizeClass) {
     val tablet = isTablet(widthClass)

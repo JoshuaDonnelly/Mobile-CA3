@@ -2,6 +2,10 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    id("org.jetbrains.kotlin.kapt")
+}
+kapt {
+    correctErrorTypes = true
 }
 
 android {
@@ -64,6 +68,9 @@ dependencies {
     implementation("androidx.navigation:navigation-fragment-ktx:2.7.7")
     implementation("androidx.navigation:navigation-ui-ktx:2.7.7")
     implementation("androidx.navigation:navigation-compose:2.7.7")
+    implementation ("androidx.room:room-runtime:2.6.1")
+    kapt ("androidx.room:room-compiler:2.6.1")
+    implementation ("androidx.room:room-ktx:2.6.1")
     debugImplementation(libs.androidx.ui.tooling)
     implementation("androidx.compose.foundation:foundation:1.5.0")
     implementation("androidx.compose.material3:material3-window-size-class:1.2.0")
