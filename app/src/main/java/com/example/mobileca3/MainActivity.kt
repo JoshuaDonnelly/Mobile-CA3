@@ -6,7 +6,12 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.*
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -44,6 +49,7 @@ import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
+import androidx.compose.ui.text.style.TextOverflow
 import coil.compose.rememberAsyncImagePainter
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -340,6 +346,7 @@ fun MealCard(meal: Meal, index: Int, tablet: Boolean) {
 
     var visible by remember { mutableStateOf(false) }
     var favourite by remember { mutableStateOf(meal.strMeal in FavouriteManager.getFavourites(context)) }
+    var expanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         delay((index * 100).toLong())
@@ -365,61 +372,101 @@ fun MealCard(meal: Meal, index: Int, tablet: Boolean) {
             .fillMaxWidth()
             .graphicsLayer { translationY = offsetY; this.alpha = alpha }
             .padding(6.dp)
+            .clickable { expanded = !expanded }
     ) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            AsyncImage(
-                model = meal.strMealThumb,
-                contentDescription = null,
-                modifier = Modifier
-                    .size(imgSize)
-                    .clip(MaterialTheme.shapes.medium),
-                contentScale = ContentScale.Crop,
-                error = painterResource(id = R.drawable.icon),
-                placeholder = painterResource(id = R.drawable.icon)
-            )
+        Column(Modifier.padding(16.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                AsyncImage(
+                    model = meal.strMealThumb,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(imgSize)
+                        .clip(MaterialTheme.shapes.medium),
+                    contentScale = ContentScale.Crop,
+                    error = painterResource(id = R.drawable.icon),
+                    placeholder = painterResource(id = R.drawable.icon)
+                )
 
-            Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                Spacer(modifier = Modifier.width(12.dp))
+
+
+                Column(modifier = Modifier.weight(1f)) {
+
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+
+                        val shortTitle = meal.strMeal.substringBefore(" ")
+                        Text(
+                            text = shortTitle,
+                            modifier = Modifier
+                                .weight(1f),
+                            style = if (tablet) MaterialTheme.typography.headlineSmall
+                            else MaterialTheme.typography.titleLarge,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+
+                        Icon(
+                            imageVector = if (favourite) Icons.Filled.Star else Icons.Outlined.Star,
+                            contentDescription = "Favourite",
+                            tint = if (favourite) Color(0xFFFFC107) else Color.Gray,
+                            modifier = Modifier
+                                .padding(start = 8.dp)
+                                .size(if (tablet) 34.dp else 28.dp)
+                                .clickable {
+                                    favourite = !favourite
+                                    if (favourite)
+                                        FavouriteManager.saveFavourite(context, Recipe(meal.strMeal, meal.strInstructions, meal.strMealThumb))
+                                    else
+                                        FavouriteManager.removeFavourite(context, Recipe(meal.strMeal, meal.strInstructions, meal.strMealThumb))
+                                }
+                        )
+                    }
+
+                    Spacer(Modifier.height(6.dp))
+
+
                     Text(
-                        meal.strMeal,
-                        style = if (tablet) MaterialTheme.typography.headlineSmall
-                        else MaterialTheme.typography.titleLarge
-                    )
-
-                    Icon(
-                        imageVector = if (favourite) Icons.Filled.Star else Icons.Outlined.Star,
-                        contentDescription = "Favourite",
-                        tint = if (favourite) Color(0xFFFFC107) else Color.Gray,
-                        modifier = Modifier
-                            .size(if (tablet) 34.dp else 28.dp)
-                            .clickable {
-                                favourite = !favourite
-                                if (favourite)
-                                    FavouriteManager.saveFavourite(context, Recipe(meal.strMeal, meal.strInstructions, meal.strMealThumb))
-                                else
-                                    FavouriteManager.removeFavourite(context, Recipe(meal.strMeal, meal.strInstructions, meal.strMealThumb))
-                            }
+                        text = meal.strInstructions.take(140) + "...",
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
+            }
 
-                Spacer(Modifier.height(6.dp))
 
-                Text(
-                    meal.strInstructions.take(140) + "...",
-                    style = MaterialTheme.typography.bodyMedium
-                )
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandVertically(animationSpec = tween(250)) + fadeIn(),
+                exit = shrinkVertically(animationSpec = tween(150)) + fadeOut()
+            ) {
+                Column(Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp)) {
+                    Divider()
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = meal.strInstructions,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                }
             }
         }
     }
 }
+
 
 @Composable
 fun BottomNavigationBar(navController: NavController, currentRoute: String?) {
@@ -491,9 +538,10 @@ fun FavouritesScreen(widthClass: WindowWidthSizeClass) {
     val tablet = isTablet(widthClass)
 
     val context = LocalContext.current
+
     // Recompose when we return to screen: read latest favourites each composition
-    val savedTitles = remember { mutableStateOf(FavouriteManager.getFavourites(context).toList()) }
-    Log.d("Pocket Chef (Favs)", "Favourites List: ${savedTitles.value}")
+    var savedTitles by remember { mutableStateOf(FavouriteManager.getFavourites(context).toList()) }
+    Log.d("Pocket Chef (Favs)", "Favourites List: ${savedTitles.toList()}")
 
     Column(
         modifier = Modifier
@@ -511,7 +559,7 @@ fun FavouritesScreen(widthClass: WindowWidthSizeClass) {
             fontWeight = FontWeight.Bold,
         )
 
-        if (savedTitles.value.isEmpty()) {
+        if (savedTitles.isEmpty()) {
             Text(
                 "No favourites yet!",
                 style = MaterialTheme.typography.headlineLarge,
@@ -522,7 +570,7 @@ fun FavouritesScreen(widthClass: WindowWidthSizeClass) {
             )
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                itemsIndexed(savedTitles.value) { _, title ->
+                itemsIndexed(savedTitles) { index, title ->
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -532,6 +580,16 @@ fun FavouritesScreen(widthClass: WindowWidthSizeClass) {
                             text = title,
                             modifier = Modifier.padding(16.dp),
                             style = MaterialTheme.typography.titleMedium
+                        )
+                        Text(
+                            text = "Remove",
+                            color = Color.Red,
+                            modifier = Modifier
+                                .padding(16.dp)
+                                .clickable {
+                                FavouriteManager.removeFavourite(context, Recipe(title, "", ""))
+                                savedTitles = FavouriteManager.getFavourites(context).toList()
+                            }
                         )
                     }
                 }
